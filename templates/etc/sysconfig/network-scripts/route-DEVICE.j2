@@ -1,0 +1,2 @@
+default via {{ gateway_ip }} dev {{ eth_interface_name }} table {{ route_table_entry_number }}
+{{ subnet_cidr }} dev {{ eth_interface_name }} src {{ interface_ip_address }} table {{ route_table_entry_number}}

@@ -1,0 +1,6 @@
+# Python 3 pip module requirements
+boto3
+botocore
+ansible==2.10
+netaddr
+selinux
