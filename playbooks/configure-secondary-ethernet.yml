@@ -1,0 +1,17 @@
+---
+- name: Configure secondary ethernet devices on OSes that a playbook exists for.
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: no
+  tasks:
+    - name: Gather instance metadata
+      include_tasks: ./include/ec2_facts.yml
+
+    - name: Include os-specific playbook. If no playbook exists, nothing happens.
+      include_tasks:
+        file: "{{ item }}"
+      with_first_found:
+        - files:
+            - include/{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
+          skip: True

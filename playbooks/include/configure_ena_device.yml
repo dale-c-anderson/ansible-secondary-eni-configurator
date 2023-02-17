@@ -1,0 +1,87 @@
+---
+- name: debug eth_interface_name
+  debug:
+      var: eth_interface_name
+
+- name: Select the interface from facts that corresponds to this interface's name
+  set_fact:
+    eth_interface_data: "{{ hostvars[inventory_hostname]['ansible_' + eth_interface_name ] }}"
+
+- name: Debug eth_interface_data
+  debug:
+      var: eth_interface_data
+
+- name: Collect ec2 metadata about the interface
+  set_fact:
+    interface_facts: "{{ ec2_facts.instances[0].network_interfaces | selectattr('mac_address', 'equalto', eth_interface_data.macaddress) | list }}"
+
+- name: Debug interface_facts
+  debug:
+      var: interface_facts
+
+- name: Set interface_ip_address
+  set_fact:
+    interface_ip_address: "{{ interface_facts[0].private_ip_address }}"
+
+- name: Set subnet_id
+  set_fact:
+    subnet_id: "{{ interface_facts[0].subnet_id }}"
+
+- name: Set vpc_id
+  set_fact:
+    vpc_id: "{{ interface_facts[0].vpc_id }}"
+
+- name: Set device index (relative to the Ec2 Instance)
+  set_fact:
+    attachment_device_index: "{{ interface_facts[0].attachment.device_index }}"
+
+- name: Set route table entry number (this is somewhat of a guess)
+  set_fact:
+    route_table_entry_number: "{{ (attachment_device_index|int) + 1 }}"
+
+- name: Get metadata about the subnet
+  ec2_vpc_subnet_info:
+    region: "{{ aws_region }}"
+    subnet_ids:
+      - "{{ subnet_id }}"
+  register: subnet_facts
+
+- name: debug subnet_facts
+  debug:
+      var: subnet_facts
+
+- name: Set subnet_cidr
+  set_fact:
+    subnet_cidr: "{{ subnet_facts.subnets[0].cidr_block }}"
+
+- name: Assume Gateway IP address is going to be "x.x.x.1" of "x.x.x.0/yy" cidr.
+  set_fact:
+      gateway_ip: "{{ subnet_cidr | ipaddr('net') | ipaddr(1) | ipaddr('address') }}"
+
+- name: Debug gateway_ip
+  debug:
+      var: gateway_ip
+
+- name: Create ifcfg template
+  template:
+    src: '{{ playbook_dir }}/../templates/etc/sysconfig/network-scripts/ifcfg-DEVICE.j2'
+    dest: '/etc/sysconfig/network-scripts/ifcfg-{{ eth_interface_name }}'
+  when: eth_interface_data is defined
+
+- name: Create route template
+  template:
+    src: '{{ playbook_dir }}/../templates/etc/sysconfig/network-scripts/route-DEVICE.j2'
+    dest: '/etc/sysconfig/network-scripts/route-{{ eth_interface_name }}'
+  when: eth_interface_data is defined
+
+- name: Create rule template
+  template:
+    src: '{{ playbook_dir }}/../templates/etc/sysconfig/network-scripts/rule-DEVICE.j2'
+    dest: '/etc/sysconfig/network-scripts/rule-{{ eth_interface_name }}'
+  when: eth_interface_data is defined
+
+- name: Restart networking
+  service:
+      name: network
+      state: restarted
+  ignore_errors: true  # This fails, even though our changes will have been applied.
